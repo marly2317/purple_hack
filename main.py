@@ -30,7 +30,8 @@ primary_assistant_prompt = ChatPromptTemplate.from_messages(
             "Use the available tools to answer product queries, recommend items, "
             "manage the shopping cart, and provide checkout information, delivery times, "
             "and payment options. Be clear and friendly in your responses."
-            "Always ensure that any product, availability, or price information comes from the database, "
+            "Always ensure that any product, availability, price information comes from the database, "
+            "also make sure delivery time and pyment method use the related tools to get the information, "
             "so the user receives the most up-to-date and reliable information. "
             "When searching for products or recommendations, if the first search returns no results, try broadening the search criteria "
             "to find relevant items. However, avoid guessing when database information is required."
@@ -102,7 +103,21 @@ config = {
 
 _printed = set()
 
-print("Welcome to the shopping assistant! Type your question below (or type 'exit' to end):")
+print("Please wait for initilization")
+
+# Initial query to display some products when the assistant starts
+initial_query = "Please welcome me, and show me some available products and category."
+
+# Make an initial call to the assistant for the predefined query
+initial_events = shopping_graph.stream_responses({"messages": ("user", initial_query)}, config)
+
+# Print only the assistant's responses from the initial query
+for event in initial_events:
+    final_result = event
+
+final_result["messages"][-1].pretty_print()
+
+print("\nType your question below (or type 'exit' to end):")
 
 # Start an interactive loop for user questions
 while True:
