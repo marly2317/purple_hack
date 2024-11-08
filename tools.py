@@ -185,7 +185,7 @@ def fetch_recommendations(product_id: int) -> List[Dict]:
 
 @tool
 def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> Dict:
-    """Adds an item to the user's cart, checks if it's sold out, and provides a confirmation message."""
+    """Adds an item to the user's cart, checks if it's out of stock or if stock is insufficient, and provides a confirmation message."""
     try:
         user_id = config.get("configurable", {}).get("thread_id", None)
         if not user_id:
@@ -194,13 +194,13 @@ def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> D
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
 
-        # Check if the product is sold out
+        # Check stock availability for the requested product
         cursor.execute("SELECT stock FROM products WHERE id = ?", (product_id,))
         stock_result = cursor.fetchone()
         if stock_result is None:
             return {"message": "Product not found."}
-        elif stock_result[0] <= 0:
-            return {"message": "The product is sold out and cannot be added to the cart."}
+        elif stock_result[0] < quantity:
+            return {"message": f"Insufficient stock. Only {stock_result[0]} items are available."}
 
         # Check if the item is already in the cart
         cursor.execute("SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?", (user_id, product_id))
@@ -229,7 +229,8 @@ def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> D
         conn.close()
 
     return {
-        "message": f"Item has been {action} in your cart."
+        "message": f"Item has been {action} in your cart.",
+        "cart": [{"product_id": item[0], "quantity": item[1]} for item in cart_items]
     }
 
 

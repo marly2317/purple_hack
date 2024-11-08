@@ -124,7 +124,7 @@ print("\nType your question below (or type 'exit' to end):\n")
 # Start an interactive loop for user questions
 while True:
     # Prompt the user to type a question
-    question = input("You: ")
+    question = input("\nYou: ")
     
     # Break the loop if the user types 'exit'
     if question.lower() == 'exit':

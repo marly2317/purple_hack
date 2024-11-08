@@ -1,0 +1,5 @@
+langgraph
+langchain-community
+langchain-anthropic
+langchain_ollama
+pandas
