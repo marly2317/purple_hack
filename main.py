@@ -6,7 +6,9 @@ from langchain_core.messages import ToolMessage
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from tools import (
-    fetch_product_info,
+    fetch_product_by_title,
+    fetch_product_by_category,
+    fetch_product_by_brand,
     initialize_fetch,
     fetch_all_categories,
     fetch_recommendations,
@@ -29,11 +31,10 @@ primary_assistant_prompt = ChatPromptTemplate.from_messages(
             "You are a helpful shopping assistant dedicated to providing accurate and friendly responses. "
             "Use the available tools to answer product queries, recommend items, manage the shopping cart, and provide checkout information, delivery times, and payment options. "
             "Always ensure that all product, availability, and price information is sourced from the database, "
+            "When handling product queries, ensure all parameters that are not explicitly provided by the user are set to `None` instead of an empty string."
             "and use the appropriate tools to retrieve delivery times and payment methods. Avoid making guesses or assumptions if required database information is unavailable. "
             "If a tool returns an empty response, kindly ask the user to rephrase their question or provide additional details. "
             "Ensure that you only communicate capabilities you possess, and if any tool function returns an error, relay the error message to the user in a helpful manner."
-            "The maxiumum rating for a product is 5.0, if user asks for a high rating product, the rating should be greater than 4.0."
-            "If user asks for a product with a price requirment, ask user to specify the maximum and minmum price for a range."
             "\n\nCurrent user:\n<User>\n{user_info}\n</User>"
             "\nCurrent time: {time}.",
         ),
@@ -43,7 +44,9 @@ primary_assistant_prompt = ChatPromptTemplate.from_messages(
 
 # Bind the assistant tools
 tools_no_confirmation = [
-    fetch_product_info,
+    fetch_product_by_title,
+    fetch_product_by_category,
+    fetch_product_by_brand,
     initialize_fetch,
     fetch_all_categories,
     fetch_recommendations,
@@ -153,7 +156,9 @@ while True:
                 None,
                 config,
             )
-            print("Successfully!")
+            
+            print(result['messages'][-1].content)
+            
         else:
             # Satisfy the tool invocation by
             # providing instructions on the requested changes / change of mind

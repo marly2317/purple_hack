@@ -7,68 +7,54 @@ from datetime import datetime, timedelta
 db = "shopping_assistant.sqlite"
 
 @tool
-def fetch_product_info(
-    title: Optional[str] = None, 
-    category: Optional[str] = None, 
-    min_price: Optional[float] = None, 
-    max_price: Optional[float] = None, 
-    min_rating: Optional[float] = None, 
-    max_rating: Optional[float] = None, 
-    stock: Optional[int] = None, 
-    brand: Optional[str] = None
-) -> List[Dict]:
-    """Fetches up to 10 product details based on title, category, price range, rating range, stock, and brand filters."""
+def fetch_product_by_title(title: str) -> List[Dict]:
+    """Fetches up to 10 products by title."""
     try:
-        title = title or None
-        category = category or None
-        brand = brand or None
+        conn = sqlite3.connect(db)
+        cursor = conn.cursor()
+        
+        query = """
+        SELECT id, title, description, price, discountPercentage, rating, stock, brand, category, thumbnail 
+        FROM products
+        WHERE title LIKE ? LIMIT 10
+        """
+        
+        cursor.execute(query, (f"%{title}%",))
+        rows = cursor.fetchall()
 
+        if not rows:
+            return [{"message": "No products found with the specified title."}]
+        
+        column_names = [desc[0] for desc in cursor.description]
+        results = [dict(zip(column_names, row)) for row in rows]
+        
+    except Exception as e:
+        return [{"message": f"An error occurred: {str(e)}"}]
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return results
+
+
+@tool
+def fetch_product_by_category(category: str) -> List[Dict]:
+    """Fetches up to 10 products by category."""
+    try:
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
 
         query = """
         SELECT id, title, description, price, discountPercentage, rating, stock, brand, category, thumbnail 
         FROM products
+        WHERE category = ? LIMIT 10
         """
-        params = []
-        filters = []
-
-        # Add filters based on provided parameters
-        if title:
-            filters.append("title LIKE ?")
-            params.append(f"%{title}%")
-        if category:
-            filters.append("category = ?")
-            params.append(category)
-        if min_price is not None:
-            filters.append("price >= ?")
-            params.append(min_price)
-        if max_price is not None:
-            filters.append("price <= ?")
-            params.append(max_price)
-        if min_rating is not None:
-            filters.append("rating >= ?")
-            params.append(min_rating)
-        if max_rating is not None:
-            filters.append("rating <= ?")
-            params.append(max_rating)
-        if stock is not None:
-            filters.append("stock >= ?")
-            params.append(stock)
-        if brand:
-            filters.append("brand = ?")
-            params.append(brand)
-
-        # Append WHERE clause and add LIMIT 10
-        if filters:
-            query += " WHERE " + " AND ".join(filters)
-        query += " LIMIT 10"
-
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
         
+        cursor.execute(query, (category,))
+        rows = cursor.fetchall()
+
         if not rows:
-            return [{"message": "No products found for the given search criteria."}]
+            return [{"message": "No products found in the specified category."}]
         
         column_names = [desc[0] for desc in cursor.description]
         results = [dict(zip(column_names, row)) for row in rows]
@@ -78,7 +64,38 @@ def fetch_product_info(
     finally:
         cursor.close()
         conn.close()
+    
+    return results
 
+
+@tool
+def fetch_product_by_brand(brand: str) -> List[Dict]:
+    """Fetches up to 10 products by brand."""
+    try:
+        conn = sqlite3.connect(db)
+        cursor = conn.cursor()
+
+        query = """
+        SELECT id, title, description, price, discountPercentage, rating, stock, brand, category, thumbnail 
+        FROM products
+        WHERE brand = ? LIMIT 10
+        """
+        
+        cursor.execute(query, (brand,))
+        rows = cursor.fetchall()
+
+        if not rows:
+            return [{"message": "No products found for the specified brand."}]
+        
+        column_names = [desc[0] for desc in cursor.description]
+        results = [dict(zip(column_names, row)) for row in rows]
+
+    except Exception as e:
+        return [{"message": f"An error occurred: {str(e)}"}]
+    finally:
+        cursor.close()
+        conn.close()
+    
     return results
 
 
@@ -168,7 +185,7 @@ def fetch_recommendations(product_id: int) -> List[Dict]:
 
 @tool
 def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> Dict:
-    """Adds an item to the user's cart, asks for confirmation, and provides a final message."""
+    """Adds an item to the user's cart, checks if it's sold out, and provides a confirmation message."""
     try:
         user_id = config.get("configurable", {}).get("thread_id", None)
         if not user_id:
@@ -177,18 +194,31 @@ def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> D
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
 
+        # Check if the product is sold out
+        cursor.execute("SELECT stock FROM products WHERE id = ?", (product_id,))
+        stock_result = cursor.fetchone()
+        if stock_result is None:
+            return {"message": "Product not found."}
+        elif stock_result[0] <= 0:
+            return {"message": "The product is sold out and cannot be added to the cart."}
+
+        # Check if the item is already in the cart
         cursor.execute("SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?", (user_id, product_id))
         result = cursor.fetchone()
 
         if result:
+            # Update quantity if the item is already in the cart
             new_quantity = result[0] + quantity
             cursor.execute("UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?", (new_quantity, user_id, product_id))
             action = "updated"
         else:
+            # Add new item to the cart
             cursor.execute("INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)", (user_id, product_id, quantity))
             action = "added"
 
         conn.commit()
+
+        # Fetch the updated cart for confirmation
         cursor.execute("SELECT product_id, quantity FROM cart WHERE user_id = ?", (user_id,))
         cart_items = cursor.fetchall()
 
@@ -199,8 +229,7 @@ def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> D
         conn.close()
 
     return {
-        "message": f"Item has been {action} in your cart.",
-        "cart": [{"product_id": item[0], "quantity": item[1]} for item in cart_items]
+        "message": f"Item has been {action} in your cart."
     }
 
 
@@ -239,8 +268,7 @@ def remove_from_cart(config: RunnableConfig, product_id: int) -> Dict:
         conn.close()
 
     return {
-        "message": "Item has been removed from your cart.",
-        "cart": [{"product_id": item[0], "quantity": item[1]} for item in cart_items]
+        "message": "Item has been removed from your cart."
     }
     
     
