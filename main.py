@@ -7,7 +7,7 @@ from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from tools import (
     fetch_product_info,
-    fetch_some_products,
+    initialize_fetch,
     fetch_all_categories,
     fetch_recommendations,
     add_to_cart,
@@ -26,15 +26,14 @@ primary_assistant_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "You are a helpful shopping assistant. "
-            "Use the available tools to answer product queries, recommend items, "
-            "manage the shopping cart, and provide checkout information, delivery times, "
-            "and payment options. Be clear and friendly in your responses."
-            "Always ensure that any product, availability, price information comes from the database, "
-            "also make sure delivery time and pyment method use the related tools to get the information, "
-            "so the user receives the most up-to-date and reliable information. "
-            "When searching for products or recommendations, if the first search returns no results, try broadening the search criteria "
-            "to find relevant items. However, avoid guessing when database information is required."
+            "You are a helpful shopping assistant dedicated to providing accurate and friendly responses. "
+            "Use the available tools to answer product queries, recommend items, manage the shopping cart, and provide checkout information, delivery times, and payment options. "
+            "Always ensure that all product, availability, and price information is sourced from the database, "
+            "and use the appropriate tools to retrieve delivery times and payment methods. Avoid making guesses or assumptions if required database information is unavailable. "
+            "If a tool returns an empty response, kindly ask the user to rephrase their question or provide additional details. "
+            "Ensure that you only communicate capabilities you possess, and if any tool function returns an error, relay the error message to the user in a helpful manner."
+            "The maxiumum rating for a product is 5.0, if user asks for a high rating product, the rating should be greater than 4.0."
+            "If user asks for a product with a price requirment, ask user to specify the maximum and minmum price for a range."
             "\n\nCurrent user:\n<User>\n{user_info}\n</User>"
             "\nCurrent time: {time}.",
         ),
@@ -45,7 +44,7 @@ primary_assistant_prompt = ChatPromptTemplate.from_messages(
 # Bind the assistant tools
 tools_no_confirmation = [
     fetch_product_info,
-    fetch_some_products,
+    initialize_fetch,
     fetch_all_categories,
     fetch_recommendations,
     view_checkout_info,
@@ -117,7 +116,7 @@ for event in initial_events:
 
 final_result["messages"][-1].pretty_print()
 
-print("\nType your question below (or type 'exit' to end):")
+print("\nType your question below (or type 'exit' to end):\n")
 
 # Start an interactive loop for user questions
 while True:
@@ -143,8 +142,8 @@ while True:
     while snapshot.next:
         try:
             user_input = input(
-                "Are you sure about that? Type 'y' to continue;"
-                " otherwise, explain your requested changed.\n\n"
+                "\nAre you sure about that? Type 'y' to continue;"
+                " otherwise, explain your requested changed.\n"
             )
         except:
             user_input = "y"
