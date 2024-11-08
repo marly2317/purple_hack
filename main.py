@@ -1,24 +1,14 @@
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, StateGraph, START
-from langgraph.prebuilt import tools_condition
-from agent import ShoppingAssistant
-from helper import create_tool_node_with_fallback, _print_event
+from helper import _print_event
 from datetime import datetime
-from typing import Annotated
-from typing_extensions import TypedDict
-from langgraph.graph.message import AnyMessage, add_messages
 import uuid
-
-import time
 from langchain_core.messages import ToolMessage
-
 # Set up the language model for the assistant
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
-
-# Import your shopping tools
 from tools import (
     fetch_product_info,
+    fetch_some_products,
+    fetch_all_categories,
     fetch_recommendations,
     add_to_cart,
     remove_from_cart,
@@ -26,9 +16,8 @@ from tools import (
     get_delivery_estimate,
     get_payment_options,
 )
+from graph import ShoppingGraph
 
-class State(TypedDict):
-    messages: Annotated[list[AnyMessage], add_messages]
 
 llm = model = ChatOllama(model = "llama3.2")
 
@@ -55,6 +44,8 @@ primary_assistant_prompt = ChatPromptTemplate.from_messages(
 # Bind the assistant tools
 tools_no_confirmation = [
     fetch_product_info,
+    fetch_some_products,
+    fetch_all_categories,
     fetch_recommendations,
     view_checkout_info,
     get_delivery_estimate,
@@ -72,64 +63,18 @@ assistant_runnable = primary_assistant_prompt | llm.bind_tools(
     tools_no_confirmation + tools_need_confirmation
 )
 
-# Initialize the assistant with the runnable
-shopping_assistant = ShoppingAssistant(assistant_runnable)
+# try:
+#     # Generate the image and save it to a file
+#     image_data = graph.get_graph(xray=True).draw_mermaid_png()
+#     with open("graph_output.png", "wb") as f:
+#         f.write(image_data)
+#     print("Image saved as graph_output.png")
+# except Exception as e:
+#     print("An error occurred:", e)
+#     pass
 
-builder = StateGraph(State)
-
-# # Define nodes: these do the work
-# builder.add_node("assistant", ShoppingAssistant(assistant_runnable))
-# builder.add_node("tools", create_tool_node_with_fallback(tools_list))
-# # Define edges: these determine how the control flow moves
-# builder.add_edge(START, "assistant")
-# builder.add_conditional_edges(
-#     "assistant",
-#     tools_condition,
-# )
-# builder.add_edge("tools", "assistant")
-
-builder.add_node("assistant", ShoppingAssistant(assistant_runnable))
-builder.add_node("tools_no_confirmation", create_tool_node_with_fallback(tools_no_confirmation))
-builder.add_node("tools_need_confirmation", create_tool_node_with_fallback(tools_need_confirmation))
-
-def route_tools(state: State):
-    next_node = tools_condition(state)
-    # If no tools are invoked, return to the user
-    if next_node == END:
-        return END
-    ai_message = state["messages"][-1]
-    # This assumes single tool calls. To handle parallel tool calling, you'd want to
-    # use an ANY condition
-    first_tool_call = ai_message.tool_calls[0]
-    if first_tool_call["name"] in confirmation_tool_names:
-        return "tools_need_confirmation"
-    return "tools_no_confirmation"
-
-builder.add_edge(START, "assistant")
-builder.add_conditional_edges(
-    "assistant", route_tools, ["tools_no_confirmation", "tools_need_confirmation", END]
-)
-builder.add_edge("tools_no_confirmation", "assistant")
-builder.add_edge("tools_need_confirmation", "assistant")
-
-# this is a complete memory for the entire graph.
-memory = MemorySaver()
-
-graph = builder.compile(
-    checkpointer=memory,
-    interrupt_before=["tools_need_confirmation"],
-)
-
-try:
-    # Generate the image and save it to a file
-    image_data = graph.get_graph(xray=True).draw_mermaid_png()
-    with open("graph_output.png", "wb") as f:
-        f.write(image_data)
-    print("Image saved as graph_output.png")
-except Exception as e:
-    print("An error occurred:", e)
-    pass
-
+# Instantiate the ShoppingGraph
+shopping_graph = ShoppingGraph(assistant_runnable, tools_no_confirmation, tools_need_confirmation)
 
 # # Example questions a user might ask the shopping assistant
 tutorial_questions = [
@@ -149,6 +94,7 @@ thread_id = str(uuid.uuid4())
 # Configuration tailored for the shopping assistant
 config = {
     "configurable": {
+        # Use the thread_id as the user_id for the shopping assistant for now
         "user_id": thread_id,
         "thread_id": thread_id,
     }
@@ -167,18 +113,16 @@ while True:
     if question.lower() == 'exit':
         print("Ending session. Thank you for using the shopping assistant!")
         break
-    
-    # Stream the assistant's response for the current question
-    events = graph.stream(
-        {"messages": ("user", question)}, config, stream_mode="values"
-    )
+
+    # Stream responses
+    events = shopping_graph.stream_responses({"messages": ("user", question)}, config)
     
     # Print each event response from the assistant
     for event in events:
         _print_event(event, _printed)
     
     # Get the graph state after processing the question
-    snapshot = graph.get_state(config)
+    snapshot = shopping_graph.get_state(config)
     
     # Handle any interrupts (like adding/removing items) that need confirmation
     while snapshot.next:
@@ -191,7 +135,7 @@ while True:
             user_input = "y"
         if user_input.strip() == "y":
             # Just continue
-            result = graph.invoke(
+            result = shopping_graph.invoke(
                 None,
                 config,
             )
@@ -199,7 +143,7 @@ while True:
         else:
             # Satisfy the tool invocation by
             # providing instructions on the requested changes / change of mind
-            result = graph.invoke(
+            result = shopping_graph.invoke(
                 {
                     "messages": [
                         ToolMessage(
@@ -210,46 +154,4 @@ while True:
                 },
                 config,
             )
-        snapshot = graph.get_state(config)
-
-# # We can reuse the tutorial questions from part 1 to see how it does.
-# for question in tutorial_questions:
-#     events = graph.stream(
-#         {"messages": ("user", question)}, config, stream_mode="values"
-#     )
-#     for event in events:
-#         _print_event(event, _printed)
-#     snapshot = graph.get_state(config)
-#     while snapshot.next:
-#         # We have an interrupt! The agent is trying to use a tool, and the user can approve or deny it
-#         # Note: This code is all outside of your graph. Typically, you would stream the output to a UI.
-#         # Then, you would have the frontend trigger a new run via an API call when the user has provided input.
-#         try:
-#             user_input = input(
-#                 "Do you approve of the above actions? Type 'y' to continue;"
-#                 " otherwise, explain your requested changed.\n\n"
-#             )
-#         except:
-#             user_input = "y"
-#         if user_input.strip() == "y":
-#             # Just continue
-#             result = graph.invoke(
-#                 None,
-#                 config,
-#             )
-#         else:
-#             # Satisfy the tool invocation by
-#             # providing instructions on the requested changes / change of mind
-#             result = graph.invoke(
-#                 {
-#                     "messages": [
-#                         ToolMessage(
-#                             tool_call_id=event["messages"][-1].tool_calls[0]["id"],
-#                             content=f"API call denied by user. Reasoning: '{user_input}'. Continue assisting, accounting for the user's input.",
-#                         )
-#                     ]
-#                 },
-#                 config,
-#             )
-#         snapshot = graph.get_state(config)
-
+        snapshot = shopping_graph.get_state(config)

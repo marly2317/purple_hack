@@ -4,6 +4,8 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from datetime import datetime, timedelta
 
+# Define the database path
+db = "shopping_assistant.sqlite"
 
 @tool
 def fetch_product_info(title: Optional[str] = None, category: Optional[str] = None) -> List[Dict]:
@@ -17,8 +19,7 @@ def fetch_product_info(title: Optional[str] = None, category: Optional[str] = No
     # Return an empty list if no filters are provided
     if not title and not category:
         return []
-    
-    db = "shopping_assistant.sqlite"
+
     conn = sqlite3.connect(db)
     cursor = conn.cursor()
 
@@ -54,12 +55,64 @@ def fetch_product_info(title: Optional[str] = None, category: Optional[str] = No
 
     return results
 
+@tool
+def fetch_some_products() -> List[Dict]:
+    """Fetches information on a limited number of available products."""
+    
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
+    
+    # Select all columns but limit the number of results returned
+    query = f"""
+    SELECT id, title, description, price, discountPercentage, rating, stock, brand, category, thumbnail 
+    FROM products
+    LIMIT ?
+    """
+    
+    cursor.execute(query, (10,))
+    rows = cursor.fetchall()
+    column_names = [desc[0] for desc in cursor.description]
+    all_products = [dict(zip(column_names, row)) for row in rows]
+    
+    cursor.close()
+    conn.close()
+    
+    return all_products
+
+
+@tool
+def fetch_all_categories() -> List[str]:
+    """Fetches all unique product categories from the database."""
+    
+    # Connect to the database
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
+    
+    # Query to select unique categories
+    query = """
+    SELECT DISTINCT category 
+    FROM products
+    ORDER BY category
+    """
+    
+    # Execute the query and fetch results
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    
+    # Extract categories into a simple list
+    categories = [row[0] for row in rows]
+    
+    # Close the cursor and connection
+    cursor.close()
+    conn.close()
+    
+    return categories
+
 
 @tool
 def fetch_recommendations(product_id: int) -> List[Dict]:
     """Fetch similar products based on content-based filtering (category and brand)."""
     
-    db = "shopping_assistant.sqlite"
     conn = sqlite3.connect(db)
     cursor = conn.cursor()
 
@@ -100,7 +153,6 @@ def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> D
     if not user_id:
         raise ValueError("No user_id configured.")
     
-    db = "shopping_assistant.sqlite"
     conn = sqlite3.connect(db)
     cursor = conn.cursor()
     
@@ -145,7 +197,6 @@ def remove_from_cart(config: RunnableConfig, product_id: int) -> Dict:
     if not user_id:
         raise ValueError("No user_id configured.")
     
-    db = "shopping_assistant.sqlite"
     conn = sqlite3.connect(db)
     cursor = conn.cursor()
     
@@ -182,7 +233,6 @@ def remove_from_cart(config: RunnableConfig, product_id: int) -> Dict:
 def view_checkout_info(config: RunnableConfig) -> Dict:
     """Provides a summary of items in the cart for the given user, including total price for checkout."""
     
-    db = "shopping_assistant.sqlite"
     conn = sqlite3.connect(db)
     cursor = conn.cursor()
     
