@@ -73,8 +73,10 @@ The assistant will prompt you to type your shopping-related queries. Common oper
 
 The assistant will provide feedback and responses based on the operations it performs.
 
-Here is some example
+Here is some example：
+
 User: "Please show me some available products in the beauty category."
+
 Assistant: "Here are some available beauty products:
 
 1. Essence Mascara Lash Princess - $9.99
@@ -82,6 +84,9 @@ Assistant: "Here are some available beauty products:
 ..."
 
 User: "Add Essence Mascara Lash Princess to my cart."
+
 Assistant: "Are you sure you want to add this product to your cart? Type 'y' to confirm or provide additional instructions."
+
 User: "y"
+
 Assistant: "The item has been added to your cart."
