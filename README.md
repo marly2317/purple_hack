@@ -6,11 +6,13 @@ This project is a Shopping Assistant developed using LangChain, LangGraph, and a
 The assistant is built using tools for interacting with a local SQLite database and handle sensitive operations (like adding/removing items from the cart) by requiring user confirmation.
 
 ## Prerequisites
-Ollama with LLaMA 3.2: You need to run Ollama with the LLaMA 3.2 model locally to handle conversational capabilities of the assistant. It is recommended to use at least a 3B parameter model for optimal performance.
+Ollama with LLaMA 3.2
 
 Python 3.11 or higher
 
 SQLite
+
+langgraph
 
 
 
@@ -51,7 +53,7 @@ Please run `populate_database.py` to get SQLite database file named shopping_ass
 
 #### Start Ollama:
 
-Run Ollama with LLaMA 3.2 locally, ensuring it is properly configured to handle at least a 3B model size for performance.
+Run Ollama with LLaMA 3.2 locally, ensuring it is properly configured to handle， and it is recommended to use at least a 3B parameter model for optimal performance.
 https://ollama.com/library/llama3.2:1b
 
 
