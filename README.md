@@ -52,6 +52,7 @@ Please run `populate_database.py` to get SQLite database file named shopping_ass
 #### Start Ollama:
 
 Run Ollama with LLaMA 3.2 locally, ensuring it is properly configured to handle at least a 3B model size for performance.
+https://ollama.com/library/llama3.2:1b
 
 
 
