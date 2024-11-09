@@ -5,6 +5,9 @@ This project is a Shopping Assistant developed using LangChain, LangGraph, and a
 
 The assistant is built using tools for interacting with a local SQLite database and handle sensitive operations (like adding/removing items from the cart) by requiring user confirmation.
 
+<img width="468" alt="image" src="https://github.com/user-attachments/assets/63f6c27d-b0b4-4da2-9e6c-9a800a7c086d">
+
+
 ## Prerequisites
 Ollama with LLaMA 3.2
 
