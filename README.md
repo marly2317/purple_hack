@@ -15,7 +15,7 @@ Python 3.11 or higher
 
 SQLite
 
-langgraph
+LangGraph
 
 
 
