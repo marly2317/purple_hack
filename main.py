@@ -1,8 +1,12 @@
+import api_key
 from helper import _print_event
 from datetime import datetime
 import uuid
+import os
+import time
+from httpx import HTTPStatusError
+from langchain.chat_models import init_chat_model
 from langchain_core.messages import ToolMessage
-from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from tools import (
     fetch_product_by_title,
@@ -21,12 +25,13 @@ from graph import ShoppingGraph
 from db_init import init_database
 
 def main():
-    # Инициализация базы данных перед выполнением других операций
+    # Инициализация базы данных
     init_database()
     
-    llm = ChatOllama(model="llama3.2")
-    
-    # Define the primary prompt template for the shopping assistant
+    # Инициализация модели Mistral
+    llm = init_chat_model("mistral-large-latest", model_provider="mistralai")
+
+    # Шаблон для ассистента
     primary_assistant_prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -43,7 +48,7 @@ def main():
         ("placeholder", "{messages}"),
     ]).partial(time=datetime.now())
 
-    # Bind the assistant tools
+    # Привязка инструментов
     tools_no_confirmation = [
         fetch_product_by_title,
         fetch_product_by_category,
@@ -55,22 +60,17 @@ def main():
         get_delivery_estimate,
         get_payment_options,
     ]
-
-    tools_need_confirmation = [
-        add_to_cart,
-        remove_from_cart,
-    ]
-
+    tools_need_confirmation = [add_to_cart, remove_from_cart]
     confirmation_tool_names = {t.name for t in tools_need_confirmation}
 
     assistant_runnable = primary_assistant_prompt | llm.bind_tools(
         tools_no_confirmation + tools_need_confirmation
     )
 
-    # Instantiate the ShoppingGraph
+    # Создание ShoppingGraph
     shopping_graph = ShoppingGraph(assistant_runnable, tools_no_confirmation, tools_need_confirmation)
 
-    # Set up a unique session ID
+    # Уникальный ID сессии
     thread_id = str(uuid.uuid4())
     config = {
         "configurable": {
@@ -80,33 +80,64 @@ def main():
     }
 
     print("Please wait for initialization")
-
-    # Initial welcome query
+    
+    # Инициализация с обработкой rate limit
     initial_query = "Please welcome me, and show me some available products and category."
-    initial_events = shopping_graph.stream_responses({"messages": ("user", initial_query)}, config)
+    max_attempts = 5
+    attempt = 0
+    while attempt < max_attempts:
+        try:
+            initial_events = shopping_graph.stream_responses({"messages": ("user", initial_query)}, config)
+            break
+        except HTTPStatusError as err:
+            if err.response.status_code == 429:  # Rate limit
+                retry_after = int(err.response.headers.get("Retry-After", 10))
+                print(f"Rate limit exceeded during initialization. Waiting {retry_after} seconds before retrying...")
+                time.sleep(retry_after)
+            else:
+                print(f"An HTTP error occurred: {err}")
+                break
+            attempt += 1
+
+    if initial_events is None:
+        print("Failed to fetch initial products after multiple attempts.")
+        return
 
     for event in initial_events:
         final_result = event
-
     final_result["messages"][-1].pretty_print()
 
     print("\nType your question below (or type 'exit' to end):\n")
 
-    # Main interaction loop
+    # Основной цикл с улучшенной обработкой rate limit
     while True:
         question = input("\nYou: ")
         if question.lower() == 'exit':
             print("Ending session. Thank you for using the shopping assistant!")
             break
 
-        events = shopping_graph.stream_responses({"messages": ("user", question)}, config)
-        _printed = set()
-        
-        for event in events:
-            _print_event(event, _printed)
-        
+        attempt = 0
+        while attempt < max_attempts:
+            try:
+                events = shopping_graph.stream_responses({"messages": ("user", question)}, config)
+                _printed = set()
+                for event in events:
+                    _print_event(event, _printed)
+                break
+            except HTTPStatusError as err:
+                if err.response.status_code == 429:  # Rate limit
+                    retry_after = int(err.response.headers.get("Retry-After", 10))
+                    print(f"Rate limit exceeded. Waiting {retry_after} seconds before retrying...")
+                    time.sleep(retry_after)
+                    attempt += 1
+                else:
+                    print(f"An HTTP error occurred: {err}")
+                    break
+        if attempt == max_attempts:
+            print("Failed to process your request after multiple attempts.")
+
+        # Обработка подтверждений
         snapshot = shopping_graph.get_state(config)
-        
         while snapshot.next:
             try:
                 user_input = input(
@@ -116,17 +147,9 @@ def main():
             except:
                 user_input = "y"
             if user_input.strip() == "y":
-                # Just continue
-                result = shopping_graph.invoke(
-                    None,
-                    config,
-                )
-                
+                result = shopping_graph.invoke(None, config)
                 print(result['messages'][-1].content)
-                
             else:
-                # Satisfy the tool invocation by
-                # providing instructions on the requested changes / change of mind
                 result = shopping_graph.invoke(
                     {
                         "messages": [

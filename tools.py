@@ -14,7 +14,7 @@ def fetch_product_by_title(title: str) -> List[Dict]:
         cursor = conn.cursor()
         
         query = """
-        SELECT id, title, description, price, discountPercentage, rating, stock, brand, category, thumbnail 
+        SELECT id, title, description, price, discountPercentage, rating, brand, category, thumbnail 
         FROM products
         WHERE title LIKE ? LIMIT 10
         """
@@ -45,7 +45,7 @@ def fetch_product_by_category(category: str) -> List[Dict]:
         cursor = conn.cursor()
 
         query = """
-        SELECT id, title, description, price, discountPercentage, rating, stock, brand, category, thumbnail 
+        SELECT id, title, description, price, discountPercentage, rating, brand, category, thumbnail 
         FROM products
         WHERE category = ? LIMIT 10
         """
@@ -76,7 +76,7 @@ def fetch_product_by_brand(brand: str) -> List[Dict]:
         cursor = conn.cursor()
 
         query = """
-        SELECT id, title, description, price, discountPercentage, rating, stock, brand, category, thumbnail 
+        SELECT id, title, description, price, discountPercentage, rating, brand, category, thumbnail 
         FROM products
         WHERE brand = ? LIMIT 10
         """
@@ -107,7 +107,7 @@ def initialize_fetch() -> List[Dict]:
         cursor = conn.cursor()
 
         query = """
-        SELECT id, title, description, price, discountPercentage, rating, stock, brand, category, thumbnail 
+        SELECT id, title, description, price, discountPercentage, rating, brand, category, thumbnail 
         FROM products
         LIMIT ?
         """
@@ -160,7 +160,7 @@ def fetch_recommendations(product_id: int) -> List[Dict]:
         category, brand = result
 
         query = """
-        SELECT id, title, description, price, discountPercentage, rating, stock, brand, category, thumbnail 
+        SELECT id, title, description, price, discountPercentage, rating, brand, category, thumbnail 
         FROM products
         WHERE (category = ? OR brand = ?) AND id != ?
         LIMIT 5
@@ -185,7 +185,7 @@ def fetch_recommendations(product_id: int) -> List[Dict]:
 
 @tool
 def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> Dict:
-    """Adds an item to the user's cart, checks if it's out of stock or if stock is insufficient, and provides a confirmation message."""
+    """Adds an item to the user's cart and provides a confirmation message."""
     try:
         user_id = config.get("configurable", {}).get("thread_id", None)
         if not user_id:
@@ -194,13 +194,11 @@ def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> D
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
 
-        # Check stock availability for the requested product
-        cursor.execute("SELECT stock FROM products WHERE id = ?", (product_id,))
-        stock_result = cursor.fetchone()
-        if stock_result is None:
+        # Check if the product exists
+        cursor.execute("SELECT id FROM products WHERE id = ?", (product_id,))
+        product_result = cursor.fetchone()
+        if not product_result:
             return {"message": "Product not found."}
-        elif stock_result[0] < quantity:
-            return {"message": f"Insufficient stock. Only {stock_result[0]} items are available."}
 
         # Check if the item is already in the cart
         cursor.execute("SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?", (user_id, product_id))
@@ -236,7 +234,7 @@ def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> D
 
 @tool
 def remove_from_cart(config: RunnableConfig, product_id: int) -> Dict:
-    """Removes an item from the user's cart, asks for confirmation, and provides a final message."""
+    """Removes an item from the user's cart and provides a final message."""
     try:
         configuration = config.get("configurable", {})
         user_id = configuration.get("thread_id", None)
@@ -335,6 +333,3 @@ def get_payment_options() -> Dict:
         "message": "Available payment options:",
         "payment_options": payment_methods
     }
-
-
-
