@@ -9,6 +9,8 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages import ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from tools import (
+    recommend_capsule_wardrobe,
+    recommend_style,
     fetch_product_by_title,
     fetch_product_by_category,
     fetch_product_by_brand,
@@ -34,25 +36,28 @@ def main():
 
     # Шаблон для ассистента
     primary_assistant_prompt = ChatPromptTemplate.from_messages([
-    (
-        "system",
-        "You are a helpful shopping assistant and stylist dedicated to providing accurate and friendly responses. "
-        "Use the available tools to answer product queries, recommend items, manage the shopping cart, and provide checkout information, delivery times, and payment options. "
-        "Additionally, you can provide style recommendations for different situations (e.g., business meeting, party, casual day), suggest complete outfits, and recommend matching accessories. "
-        "Always ensure that all product, availability, and price information is sourced from the database. "
-        "When handling product queries, ensure all parameters that are not explicitly provided by the user are set to `None` instead of an empty string. "
-        "Use the appropriate tools to retrieve delivery times, payment methods, and style recommendations. "
-        "Avoid making guesses or assumptions if required database information is unavailable. "
-        "If a tool returns an empty response, kindly ask the user to rephrase their question or provide additional details. "
-        "Ensure that you only communicate capabilities you possess, and if any tool function returns an error, relay the error message to the user in a helpful manner."
-        "\n\nCurrent user:\n<User>\n{user_info}\n</User>"
-        "\nCurrent time: {time}.",
-    ),
-    ("placeholder", "{messages}"),
+        (
+            "system",
+            """Вы AI-стилист с четкими правилами работы. Основные задачи:
+
+1. При запросах со словами "гардероб", "комплект", "набор" ИСПОЛЬЗОВАТЬ ИНСТРУМЕНТ recommend_capsule_wardrobe
+2. Для деловых встреч использовать категорию "Business Clothing"
+3. Обязательные параметры:
+   - gender: male/female (определять из контекста)
+   - max_price: бюджет (указывать явно)
+   
+Пример вызова:
+{{"tool": "recommend_capsule_wardrobe", "args": {{"situation": "деловая встреча", "gender": "male", "max_price": 100}}}}
+
+Текущее время: {time}"""
+        ),
+        ("placeholder", "{messages}"),
     ]).partial(time=datetime.now())
 
     # Привязка инструментов
     tools_no_confirmation = [
+        recommend_capsule_wardrobe,
+        recommend_style,
         fetch_product_by_title,
         fetch_product_by_category,
         fetch_product_by_brand,

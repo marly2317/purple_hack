@@ -6,9 +6,146 @@ from datetime import datetime, timedelta
 
 db = "shopping_assistant.sqlite"
 
+
+from langchain_core.tools import tool
+import sqlite3
+
+db = "shopping_assistant.sqlite"
+
+@tool
+def recommend_cosmetics(skin_type: str, gender: str, max_price: float, category: str = None):
+    """Рекомендует косметические товары с учетом типа кожи, пола, бюджета и категории."""
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
+    
+    query = """
+    SELECT product_name, brand, price_usd, category, skin_type
+    FROM cosmetics 
+    WHERE skin_type = ? AND gender_target = ? AND price_usd <= ?
+    """
+    params = [skin_type, gender, max_price]
+    
+    if category:
+        query += " AND category = ?"
+        params.append(category)
+    
+    query += " ORDER BY price_usd ASC LIMIT 3"
+    cursor.execute(query, params)
+    items = cursor.fetchall()
+    
+    conn.close()
+    
+    if not items:
+        return {"error": "Нет подходящих косметических товаров"}
+    
+    return {
+        "recommendations": [
+            {"product_name": item[0], "brand": item[1], "price": item[2], "category": item[3], "skin_type": item[4]}
+            for item in items
+        ]
+    }
+
+
+# В файле tools.py модифицируйте инструмент:
+@tool
+def recommend_capsule_wardrobe(situation: str, gender: str, max_price: float) -> Dict:
+    """Рекомендует капсульный гардероб с учетом пола, ситуации и бюджета."""
+    try:
+        conn = sqlite3.connect(db)
+        cursor = conn.cursor()
+        
+        # Фильтрация для деловой встречи
+        if situation.lower() == "деловая встреча":
+            query = """
+            SELECT title, price, description 
+            FROM products 
+            WHERE 
+                (category = 'Business Clothing' OR 
+                description LIKE '%formal%' OR 
+                description LIKE '%business%' OR 
+                description LIKE '%office%') AND
+                price <= ?
+            ORDER BY price ASC
+            LIMIT 3
+            """
+            cursor.execute(query, (gender, max_price))
+        else:
+            return {"error": "Пока что поддерживаются только деловые встречи."}
+        
+        # Обработка результатов
+        items = cursor.fetchall()
+        if not items:
+            return {"error": "Нет подходящих товаров для данной ситуации и бюджета."}
+            
+        return {
+            "recommendations": [
+                {
+                    "title": item[0],
+                    "price": item[1],
+                    "description": item[2]
+                } for item in items
+            ],
+            "total": sum(item[1] for item in items)
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        conn.close()
+@tool
+def recommend_style(situation: str) -> Dict:
+    """Рекомендует капсульный гардероб для заданной ситуации с детальными объяснениями сочетания товаров."""
+    try:
+        conn = sqlite3.connect(db)
+        cursor = conn.cursor()
+        
+        categories = ["Clothing", "Footwear", "Accessories"]
+        recommendations = []
+        
+        for category in categories:
+            query = """
+            SELECT id, title, description, price, brand, category, situations 
+            FROM products 
+            WHERE situations LIKE ? AND category = ?
+            LIMIT 1
+            """
+            cursor.execute(query, (f"%{situation}%", category))
+            row = cursor.fetchone()
+            if row:
+                column_names = [desc[0] for desc in cursor.description]
+                product = dict(zip(column_names, row))
+                tags = product['situations'].split(', ')
+                explanation = f"{product['title']} идеален для '{situation}', так как он помечен тегами: {', '.join(tags)}, а описание '{product['description']}' подчёркивает его уместность."
+                product['explanation'] = explanation
+                recommendations.append(product)
+        
+        if not recommendations:
+            return {"message": f"Не найдено подходящих вещей для ситуации '{situation}'."}
+        
+        if len(recommendations) == 3:
+            combination_explanation = f"Эти товары идеально подходят для '{situation}': "
+            combination_explanation += f"{recommendations[0]['title']} (одежда) задаёт основу образа благодаря '{recommendations[0]['description']}', "
+            combination_explanation += f"{recommendations[1]['title']} (обувь) гармонично дополняет его за счёт '{recommendations[1]['description']}', "
+            combination_explanation += f"а {recommendations[2]['title']} (аксессуар) добавляет завершающий штрих благодаря '{recommendations[2]['description']}'."
+        else:
+            combination_explanation = f"Эти товары рекомендованы для '{situation}': "
+            combination_explanation += " и ".join([f"{product['title']} ({product['category']}) с характеристикой '{product['description']}'" for product in recommendations]) + " вместе создают стильный образ."
+        
+    except Exception as e:
+        return {"message": f"Произошла ошибка: {str(e)}"}
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return {
+        "message": f"Капсульный гардероб для ситуации '{situation}':",
+        "recommendations": recommendations,
+        "combination_explanation": combination_explanation
+    }
+
 @tool
 def fetch_product_by_title(title: str) -> List[Dict]:
-    """Fetches up to 10 products by title."""
+    """Ищет товары по названию и возвращает до 10 результатов."""
     try:
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
@@ -36,10 +173,9 @@ def fetch_product_by_title(title: str) -> List[Dict]:
     
     return results
 
-
 @tool
 def fetch_product_by_category(category: str) -> List[Dict]:
-    """Fetches up to 10 products by category."""
+    """Ищет товары по категории и возвращает до 10 результатов."""
     try:
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
@@ -67,10 +203,9 @@ def fetch_product_by_category(category: str) -> List[Dict]:
     
     return results
 
-
 @tool
 def fetch_product_by_brand(brand: str) -> List[Dict]:
-    """Fetches up to 10 products by brand."""
+    """Ищет товары по бренду и возвращает до 10 результатов."""
     try:
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
@@ -98,10 +233,9 @@ def fetch_product_by_brand(brand: str) -> List[Dict]:
     
     return results
 
-
 @tool
 def initialize_fetch() -> List[Dict]:
-    """Fetches information on a limited number of available products."""
+    """Инициализирует загрузку и возвращает информацию о 10 доступных товарах."""
     try:
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
@@ -109,9 +243,9 @@ def initialize_fetch() -> List[Dict]:
         query = """
         SELECT id, title, description, price, discountPercentage, rating, brand, category, thumbnail 
         FROM products
-        LIMIT ?
+        LIMIT 10
         """
-        cursor.execute(query, (10,))
+        cursor.execute(query)
         rows = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         all_products = [dict(zip(column_names, row)) for row in rows]
@@ -124,10 +258,9 @@ def initialize_fetch() -> List[Dict]:
 
     return all_products
 
-
 @tool
 def fetch_all_categories() -> List[str]:
-    """Fetches all unique product categories from the database."""
+    """Возвращает все уникальные категории товаров из базы данных."""
     try:
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
@@ -145,10 +278,9 @@ def fetch_all_categories() -> List[str]:
 
     return categories
 
-
 @tool
 def fetch_recommendations(product_id: int) -> List[Dict]:
-    """Fetch similar products based on content-based filtering (category and brand)."""
+    """Возвращает похожие товары на основе категории и бренда."""
     try:
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
@@ -182,59 +314,61 @@ def fetch_recommendations(product_id: int) -> List[Dict]:
 
     return recommendations
 
-
 @tool
 def add_to_cart(config: RunnableConfig, product_id: int, quantity: int = 1) -> Dict:
-    """Adds an item to the user's cart and provides a confirmation message."""
+    """Добавляет товар в корзину пользователя и возвращает подтверждение."""
     try:
         user_id = config.get("configurable", {}).get("thread_id", None)
         if not user_id:
-            raise ValueError("No user_id configured.")
+            raise ValueError("Не указан user_id.")
         
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
 
-        # Check if the product exists
-        cursor.execute("SELECT id FROM products WHERE id = ?", (product_id,))
+        cursor.execute("SELECT id, stock FROM products WHERE id = ?", (product_id,))
         product_result = cursor.fetchone()
         if not product_result:
-            return {"message": "Product not found."}
+            return {"message": "Товар не найден."}
+        
+        stock = product_result[1]
+        if stock < quantity:
+            return {"message": f"Недостаточно товара на складе. Доступно только {stock} единиц."}
 
-        # Check if the item is already in the cart
         cursor.execute("SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?", (user_id, product_id))
         result = cursor.fetchone()
 
         if result:
-            # Update quantity if the item is already in the cart
             new_quantity = result[0] + quantity
+            if stock < new_quantity:
+                return {"message": f"Недостаточно товара на складе. Доступно только {stock} единиц."}
             cursor.execute("UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?", (new_quantity, user_id, product_id))
-            action = "updated"
+            action = "обновлен"
         else:
-            # Add new item to the cart
             cursor.execute("INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)", (user_id, product_id, quantity))
-            action = "added"
+            action = "добавлен"
+
+        new_stock = stock - quantity
+        cursor.execute("UPDATE products SET stock = ? WHERE id = ?", (new_stock, product_id))
 
         conn.commit()
 
-        # Fetch the updated cart for confirmation
         cursor.execute("SELECT product_id, quantity FROM cart WHERE user_id = ?", (user_id,))
         cart_items = cursor.fetchall()
 
     except Exception as e:
-        return {"message": f"An error occurred: {str(e)}"}
+        return {"message": f"Произошла ошибка: {str(e)}"}
     finally:
         cursor.close()
         conn.close()
 
     return {
-        "message": f"Item has been {action} in your cart.",
+        "message": f"Товар {action} в вашей корзине.",
         "cart": [{"product_id": item[0], "quantity": item[1]} for item in cart_items]
     }
 
-
 @tool
 def remove_from_cart(config: RunnableConfig, product_id: int) -> Dict:
-    """Removes an item from the user's cart and provides a final message."""
+    """Удаляет товар из корзины пользователя и возвращает подтверждение."""
     try:
         configuration = config.get("configurable", {})
         user_id = configuration.get("thread_id", None)
@@ -244,19 +378,15 @@ def remove_from_cart(config: RunnableConfig, product_id: int) -> Dict:
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
 
-        # Check if the item exists in the cart
         cursor.execute("SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?", (user_id, product_id))
         result = cursor.fetchone()
 
         if not result:
-            # If item not in cart, return a message
             return {"message": "Item not found in your cart."}
 
-        # Remove the item from the cart
         cursor.execute("DELETE FROM cart WHERE user_id = ? AND product_id = ?", (user_id, product_id))
         conn.commit()
 
-        # Fetch the updated cart for confirmation
         cursor.execute("SELECT product_id, quantity FROM cart WHERE user_id = ?", (user_id,))
         cart_items = cursor.fetchall()
 
@@ -269,11 +399,10 @@ def remove_from_cart(config: RunnableConfig, product_id: int) -> Dict:
     return {
         "message": "Item has been removed from your cart."
     }
-    
-    
+
 @tool
 def view_checkout_info(config: RunnableConfig) -> Dict:
-    """Provides a summary of items in the cart for the given user, including total price for checkout."""
+    """Возвращает сводку о товарах в корзине пользователя, включая общую стоимость."""
     try:
         configuration = config.get("configurable", {})
         user_id = configuration.get("thread_id", None)
@@ -283,7 +412,6 @@ def view_checkout_info(config: RunnableConfig) -> Dict:
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
 
-        # Fetch cart items for the given user_id and join with products to get prices and titles
         cursor.execute("""
             SELECT p.id as product_id, p.title, p.price, c.quantity 
             FROM cart c 
@@ -292,8 +420,7 @@ def view_checkout_info(config: RunnableConfig) -> Dict:
         """, (user_id,))
         cart_items = cursor.fetchall()
 
-        # Calculate total price and format items for the response
-        total_price = sum(item[2] * item[3] for item in cart_items)  # item[2] is price, item[3] is quantity
+        total_price = sum(item[2] * item[3] for item in cart_items)
         items = [{"product_id": item[0], "title": item[1], "price": item[2], "quantity": item[3]} for item in cart_items]
 
     except Exception as e:
@@ -308,27 +435,19 @@ def view_checkout_info(config: RunnableConfig) -> Dict:
         "items": items
     }
 
-
 @tool
 def get_delivery_estimate() -> Dict:
-    """Provides a generic estimated delivery time for an order."""
-    
-    # Calculate an estimated delivery time, e.g., 5-7 business days from now
+    """Возвращает предполагаемое время доставки для заказа."""
     estimated_delivery = datetime.now() + timedelta(days=5)
-    
     return {
         "message": "Estimated delivery time:",
         "delivery_estimate": estimated_delivery.strftime('%Y-%m-%d')
     }
-    
 
 @tool
 def get_payment_options() -> Dict:
-    """Provides available payment options for the user."""
-    
-    # Static list of payment methods
+    """Возвращает доступные способы оплаты для пользователя."""
     payment_methods = ["Credit Card", "Debit Card", "PayPal", "Gift Card"]
-    
     return {
         "message": "Available payment options:",
         "payment_options": payment_methods
