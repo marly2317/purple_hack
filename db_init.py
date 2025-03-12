@@ -4,11 +4,9 @@ def init_database():
     try:
         conn = sqlite3.connect('shopping_assistant.sqlite')
         cursor = conn.cursor()
-        
-        # Удаляем существующую таблицу products для применения новой схемы
         cursor.execute("DROP TABLE IF EXISTS products")
+        cursor.execute("DROP TABLE IF EXISTS cart")
         
-        # Создаем таблицу products с полями, соответствующими https://dummyjson.com/products
         cursor.execute('''
         CREATE TABLE products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +22,6 @@ def init_database():
         )
         ''')
 
-        # Создаем таблицу cart для хранения товаров в корзине
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS cart (
             user_id TEXT,
@@ -35,22 +32,40 @@ def init_database():
         )
         ''')
 
-        # Тестовые данные для таблицы products
+        # Убраны русские описания (последний элемент в каждом кортеже)
         sample_products = [
-            # (title, description, price, discountPercentage, rating, stock, brand, category, thumbnail)
-            ('Chanel No. 5', 'Classic floral aldehyde fragrance', 135.00, 10.0, 4.5, 50, 'Chanel', 'Fragrance', 'chanel_no5.jpg'),
-            ('Dior Sauvage', 'Fresh and bold masculine fragrance', 155.00, 10.0, 4.7, 40, 'Dior', 'Fragrance', 'dior_sauvage.jpg'),
-            ('Jo Malone London', 'English Pear & Freesia Cologne', 142.00, 10.0, 4.2, 30, 'Jo Malone', 'Fragrance', 'jo_malone.jpg'),
-            ('Tom Ford Black Orchid', 'Luxurious and sophisticated unisex fragrance', 180.00, 10.0, 4.8, 20, 'Tom Ford', 'Fragrance', 'tom_ford_black_orchid.jpg'),
-            ('Versace Bright Crystal', 'Fresh and floral feminine fragrance', 96.00, 10.0, 4.1, 60, 'Versace', 'Fragrance', 'versace_bright_crystal.jpg'),
-            ('iPhone 14', 'Latest Apple smartphone', 999.00, 10.0, 4.3, 80, 'Apple', 'Electronics', 'iphone_14.jpg'),
-            ('Nike Air Max', 'Comfortable running shoes', 129.99, 10.0, 4.6, 100, 'Nike', 'Footwear', 'nike_air_max.jpg'),
-            ('Essence Mascara', 'Lash Princess False Lash Effect Mascara', 4.99, 10.0, 3.9, 150, 'Essence', 'Beauty', 'essence_mascara.jpg'),
-            ('Samsung TV', '55-inch 4K Smart TV', 699.99, 10.0, 4.4, 25, 'Samsung', 'Electronics', 'samsung_tv.jpg'),
-            ('Cotton T-Shirt', 'Basic crew neck t-shirt', 19.99, 10.0, 3.8, 200, 'Generic', 'Clothing', 'cotton_tshirt.jpg')
-        ]
+    # Одежда
+    ('Evening Dress', 'Elegant evening dress with deep neckline', 250.00, 15.0, 4.8, 20, 'Gucci', 'Clothing', 'evening_dress.jpg'),
+    ('Business Suit', 'Tailored business suit for men', 350.00, 10.0, 4.6, 30, 'Armani', 'Clothing', 'business_suit.jpg'),
+    ('Casual T-Shirt', 'Comfortable cotton t-shirt', 25.00, 5.0, 4.2, 100, 'Nike', 'Clothing', 'casual_tshirt.jpg'),
+    ('Denim Jeans', 'Slim-fit denim jeans', 60.00, 10.0, 4.3, 80, 'Levi\'s', 'Clothing', 'denim_jeans.jpg'),
+    ('Wool Coat', 'Warm wool coat for winter', 200.00, 15.0, 4.5, 25, 'Burberry', 'Clothing', 'wool_coat.jpg'),
+    ('Cocktail Dress', 'Chic cocktail dress for parties', 180.00, 10.0, 4.7, 20, 'Versace', 'Clothing', 'cocktail_dress.jpg'),
+    ('Sports Jacket', 'Waterproof sports jacket', 90.00, 10.0, 4.4, 50, 'The North Face', 'Clothing', 'sports_jacket.jpg'),
+    ('Blazer', 'Structured blazer for women', 120.00, 10.0, 4.5, 35, 'Zara', 'Clothing', 'blazer.jpg'),
+    ('Knit Sweater', 'Cozy knit sweater', 45.00, 5.0, 4.3, 60, 'H&M', 'Clothing', 'knit_sweater.jpg'),
+    ('Summer Skirt', 'Flowy summer skirt', 35.00, 5.0, 4.2, 70, 'Mango', 'Clothing', 'summer_skirt.jpg'),
+
+    # Обувь
+    ('Running Shoes', 'Lightweight running shoes with cushioning', 80.00, 10.0, 4.5, 60, 'Adidas', 'Footwear', 'running_shoes.jpg'),
+    ('Leather Boots', 'Stylish leather boots for winter', 120.00, 15.0, 4.7, 40, 'Timberland', 'Footwear', 'leather_boots.jpg'),
+    ('High Heels', 'Elegant high heels for formal events', 90.00, 10.0, 4.4, 50, 'Jimmy Choo', 'Footwear', 'high_heels.jpg'),
+    ('Casual Sneakers', 'Versatile white sneakers', 55.00, 5.0, 4.3, 90, 'Converse', 'Footwear', 'casual_sneakers.jpg'),
+    ('Sandals', 'Comfortable flat sandals', 40.00, 5.0, 4.2, 80, 'Birkenstock', 'Footwear', 'sandals.jpg'),
+    ('Ankle Boots', 'Chic ankle boots with low heel', 100.00, 10.0, 4.6, 45, 'Clarks', 'Footwear', 'ankle_boots.jpg'),
+    ('Loafers', 'Classic leather loafers', 85.00, 10.0, 4.4, 50, 'Tod\'s', 'Footwear', 'loafers.jpg'),
+
+    # Аксессуары
+    ('Leather Handbag', 'Classic leather handbag', 150.00, 10.0, 4.6, 30, 'Louis Vuitton', 'Accessories', 'leather_handbag.jpg'),
+    ('Silk Scarf', 'Luxurious silk scarf', 70.00, 10.0, 4.3, 40, 'Hermes', 'Accessories', 'silk_scarf.jpg'),
+    ('Sunglasses', 'Stylish sunglasses with UV protection', 50.00, 10.0, 4.2, 100, 'Ray-Ban', 'Accessories', 'sunglasses.jpg'),
+    ('Leather Belt', 'Classic leather belt', 40.00, 10.0, 4.3, 70, 'Calvin Klein', 'Accessories', 'leather_belt.jpg'),
+    ('Wristwatch', 'Elegant wristwatch with leather strap', 120.00, 10.0, 4.6, 30, 'Rolex', 'Accessories', 'wristwatch.jpg'),
+    ('Statement Necklace', 'Bold statement necklace', 60.00, 10.0, 4.4, 25, 'Swarovski', 'Accessories', 'statement_necklace.jpg'),
+    ('Tote Bag', 'Spacious tote bag', 80.00, 10.0, 4.5, 40, 'Michael Kors', 'Accessories', 'tote_bag.jpg'),
+    ('Fedora Hat', 'Stylish fedora hat', 45.00, 5.0, 4.3, 50, 'Brixton', 'Accessories', 'fedora_hat.jpg')
+]
         
-        # Проверяем, пуста ли таблица products, и добавляем данные, если она пуста
         cursor.execute('SELECT COUNT(*) FROM products')
         count = cursor.fetchone()[0]
         if count == 0:
